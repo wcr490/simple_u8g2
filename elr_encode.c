@@ -179,7 +179,7 @@ uint8_t rle_prepare_encode(struct RleBlock *target, uint8_t a, uint8_t b)
 {
     uint8_t rle_0 = target->rle_0;
     uint8_t rle_1 = target->rle_1;
-    // Don't use (a > (1 << rle_0) - 1)
+    // Don't use (a >= (1 << rle_0) - 1)
     // Because mostly we think that combining a and b is a better choice to save memory
     while (a > (1 << rle_0) - 1)
     {

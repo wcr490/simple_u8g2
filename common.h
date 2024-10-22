@@ -5,27 +5,27 @@
 
 struct RleCompressConf {
     uint8_t offset;
-    uint8_t each_size;
-    uint8_t rle_cnt;
-    uint8_t num;
+    uint32_t each_size;
+    uint32_t rle_cnt;
+    uint32_t num;
 };
 struct RleBlock {
     /**/
     uint8_t* rle_buf;
     uint8_t* res_buf;
-    uint8_t res_msize;
+    uint32_t res_msize;
     uint8_t rle_0, rle_1;
     uint8_t bit_cursor;
-    uint8_t byte_cursor;
-    uint8_t rle_bit_cnt;
+    uint32_t byte_cursor;
+    uint32_t rle_bit_cnt;
     uint8_t is_first_time;
     uint8_t last_a;
     uint8_t last_b;
     struct RleCompressConf* conf;
 };
 
-uint8_t rle_new(struct RleBlock **self, uint8_t result_size);
-uint8_t rle_alloc(struct RleBlock **self, uint8_t result_size);
+uint8_t rle_new(struct RleBlock **self, uint32_t result_size);
+uint8_t rle_alloc(struct RleBlock **self, uint32_t result_size);
 uint8_t rle_init(struct RleBlock *self);
 uint8_t rle_free(struct RleBlock *self);
 
@@ -33,8 +33,11 @@ uint8_t rle_free(struct RleBlock *self);
 uint8_t rle_write_bits(struct RleBlock* target, uint8_t byte, uint8_t len);
 uint8_t rle_encode(struct RleBlock* target, uint8_t a, uint8_t b);
 uint8_t rle_prepare_encode(struct RleBlock* target, uint8_t a, uint8_t b);
-uint8_t rle_compress_stream(struct RleBlock* target, uint8_t* stream, uint8_t index);
-uint8_t rle_compress_load(struct RleBlock *target, uint8_t* stream, uint8_t len);
+uint8_t rle_compress_stream(struct RleBlock* target, uint8_t* stream, uint32_t index);
+uint8_t rle_compress_load(struct RleBlock *target, uint8_t* stream, uint32_t len);
+uint8_t compress_conf_init(struct RleBlock *self);
+uint8_t rle_try_best_rle(struct RleBlock *target);
+uint8_t rle_get_min_size(struct RleBlock *target, uint32_t *size);
  
 
 /*

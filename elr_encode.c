@@ -4,34 +4,39 @@
 #include "stdlib.h"
 #include "string.h"
 #include "stdio.h"
+#include <stdint.h>
+#include "time.h"
 
-uint8_t rle_new(struct RleBlock **self, uint8_t result_size)
+uint8_t rle_new(struct RleBlock **self, uint32_t data_size)
 {
     struct RleBlock *new;
-    if (rle_alloc(&new, result_size))
+    if (rle_alloc(&new, data_size))
         return 1;
     if (rle_init(new))
         return 1;
     *self = new;
     return 0;
 }
-uint8_t rle_alloc(struct RleBlock **self, uint8_t result_size)
+uint8_t rle_alloc(struct RleBlock **self, uint32_t data_size)
 {
     struct RleBlock *s = malloc(sizeof(struct RleBlock));
     if (s == NULL)
         goto FAIL_SELF;
-    s->res_buf = malloc(result_size * (sizeof(char)));
+    // The worst case is that the data completely unrepeated
+    // Also, consider the flag bit.
+    s->res_buf = malloc((8 + 1) * data_size * (sizeof(char)));
     if (s->res_buf == NULL)
         goto FAIL_RES;
     s->conf = malloc(sizeof(struct RleCompressConf));
     if (s->conf == NULL)
         goto FAIL_CONF;
-    s->rle_buf = malloc(result_size * 8);
+    // TODO: Optimize the size
+    s->rle_buf = malloc(8 * data_size * (sizeof(char)));
     if (s->rle_buf == NULL)
         goto FAIL_RLE;
-    memset(s->res_buf, 0, result_size);
-    memset(s->rle_buf, 0, result_size * 8);
-    s->res_msize = result_size;
+    memset(s->res_buf, 0, (8 + 1) * data_size * (sizeof(char)));
+    memset(s->rle_buf, 0, 8 * data_size * (sizeof(char)));
+    s->res_msize = (8 + 1) * data_size * (sizeof(char));
     *self = s;
     return 0;
 FAIL_RLE:
@@ -46,13 +51,18 @@ FAIL_SELF:
 uint8_t rle_init(struct RleBlock *self)
 {
     memset(self->res_buf, 0, self->res_msize);
-    memset(self->rle_buf, 0, 8 * self->res_msize);
     self->last_a = 0;
     self->last_b = 0;
     self->bit_cursor = 0;
     self->byte_cursor = 0;
     self->is_first_time = 1;
     self->rle_bit_cnt = 0;
+    return 0;
+}
+uint8_t compress_conf_init(struct RleBlock *self)
+{
+    memset(self->rle_buf, 0, (self->res_msize * 8) / 9);
+    self->conf->rle_cnt = 0;
     return 0;
 }
 uint8_t rle_free(struct RleBlock *self)
@@ -66,9 +76,10 @@ uint8_t rle_free(struct RleBlock *self)
     self = NULL;
     return 0;
 }
-uint8_t rle_compress_stream(struct RleBlock *target, uint8_t *stream, uint8_t index)
+
+uint8_t rle_compress_stream(struct RleBlock *target, uint8_t *stream, uint32_t index)
 {
-    uint8_t last_is_one = 0, cur_len = 0, cnt = target->conf->rle_cnt;
+    uint32_t last_is_one = 0, cur_len = 0, cnt = target->conf->rle_cnt;
     for (int i = 7; i >= 0; i--)
     {
         // 0
@@ -77,6 +88,7 @@ uint8_t rle_compress_stream(struct RleBlock *target, uint8_t *stream, uint8_t in
             if (last_is_one)
             {
                 target->rle_buf[cnt] = cur_len;
+                // printf("write: %d\n", cur_len);
                 cur_len = 0;
                 last_is_one = 0;
                 cnt++;
@@ -89,6 +101,7 @@ uint8_t rle_compress_stream(struct RleBlock *target, uint8_t *stream, uint8_t in
             if (!last_is_one)
             {
                 target->rle_buf[cnt] = cur_len;
+                // printf("write: %d\n", cur_len);
                 cur_len = 0;
                 last_is_one = 1;
                 cnt++;
@@ -104,22 +117,56 @@ uint8_t rle_compress_stream(struct RleBlock *target, uint8_t *stream, uint8_t in
         target->rle_buf[cnt] = 0;
         cnt++;
     }
-    target->conf->rle_cnt += cnt;
+    target->conf->rle_cnt = cnt;
     return 0;
 }
 
-uint8_t rle_compress_load(struct RleBlock *target, uint8_t *stream, uint8_t len)
+uint8_t rle_compress_load(struct RleBlock *target, uint8_t *stream, uint32_t len)
 {
     for (int i = 0; i < len; i++)
     {
-        for (int k = 0; k < target->conf->each_size; k++)
+        for (uint32_t k = 0; k < target->conf->each_size; k++)
         {
-            printf("index in buf: %d\n", k);
             if (rle_compress_stream(target, stream, i * target->conf->each_size + k))
                 return 1;
         }
     }
 
+    return 0;
+}
+uint8_t rle_try_best_rle(struct RleBlock *target)
+{
+    rle_get_min_size(target, NULL);
+    return 0;
+}
+uint8_t rle_get_min_size(struct RleBlock *target, uint32_t *size)
+{
+    uint32_t min_volume = 0xffffffff;
+    uint8_t best_rle_0 = 0, best_rle_1 = 0;
+    for (int cur_rle_0 = 1; cur_rle_0 < 8; cur_rle_0++)
+    {
+        for (int cur_rle_1 = 1; cur_rle_1 < 8; cur_rle_1++)
+        {
+            target->rle_0 = cur_rle_0;
+            target->rle_1 = cur_rle_1;
+            for (int s = 0; s < target->conf->rle_cnt; s += 2)
+            {
+                if (rle_prepare_encode(target, target->rle_buf[s], target->rle_buf[s + 1]))
+                    return 1;
+            }
+            if (min_volume > target->byte_cursor + 1)
+            {
+                min_volume = target->byte_cursor + 1;
+                best_rle_0 = cur_rle_0, best_rle_1 = cur_rle_1;
+                // printf("best_rle_0: %d, best_rle_1: %d\n", best_rle_0, best_rle_1);
+                // printf("min_volume = %d bytes, best_rle_0 = %d, best_rle_1 = %d\n", min_volume, cur_rle_0, cur_rle_1);
+            }
+            rle_init(target);
+        }
+    }
+    target->rle_0 = best_rle_0, target->rle_1 = best_rle_1;
+    if (size != NULL)
+        *size = min_volume;
     return 0;
 }
 
@@ -202,8 +249,13 @@ uint8_t rle_prepare_encode(struct RleBlock *target, uint8_t a, uint8_t b)
 
 int main()
 {
+    uint32_t test_buffer_size = 10000000;
+    uint8_t *strm = malloc(test_buffer_size * sizeof(uint8_t));
+
+    srand((unsigned)time(NULL));
+
     struct RleBlock *test;
-    if (rle_new(&test, 100))
+    if (rle_new(&test, test_buffer_size))
     {
         printf("Error: RleBlock malloc failed\n");
         return -1;
@@ -246,20 +298,36 @@ int main()
     /* Test 4 */
     // RLE algorithm
     rle_init(test);
-    uint8_t *strm = malloc(5 * sizeof(uint8_t));
     // 9
     // 0000 1 00 1
     // 4    1 2  1
     strm[0] = (1 << 3) | (1);
     test->conf->each_size = 1;
-    test->conf->rle_cnt = 0;
+    compress_conf_init(test);
     rle_compress_load(test, strm, 1);
     printf("input: 9\n");
-    printf("output: %d, %d, %d, %d\n", test->rle_buf[0], test->rle_buf[1], test->rle_buf[2], test->rle_buf[3]);
+    printf("output: %d  %d  %d  %d\n", test->rle_buf[0], test->rle_buf[1], test->rle_buf[2], test->rle_buf[3]);
     printf("//////////////////////////////////////////////\n");
 
     /* Test 5 */
-    // RLE algorithm
+    // RLE Compress
+    rle_init(test);
+    // 180
+    // 1 0 11 0 1 00
+    // 1 1 2  1 1 2
+    memset(strm, 0, test_buffer_size);
+    strm[0] = 188;
+    test->conf->each_size = 1;
+    compress_conf_init(test);
+    rle_compress_load(test, strm, 1);
+    printf("input: 127\n");
+    printf("cnt: %d\n", test->conf->rle_cnt);
+    printf("output: %d  %d  %d  %d  ", test->rle_buf[0], test->rle_buf[1], test->rle_buf[2], test->rle_buf[3]);
+    printf("%d  %d  %d  %d\n", test->rle_buf[4], test->rle_buf[5], test->rle_buf[6], test->rle_buf[7]);
+    printf("//////////////////////////////////////////////\n");
+
+    /* Test 6 */
+    // Compress and Encode
     rle_init(test);
     // 9
     // 0000 1 00 1
@@ -270,13 +338,81 @@ int main()
     // 5     2  1
     strm[1] = 6;
     test->conf->each_size = 2;
-    test->conf->rle_cnt = 0;
+    compress_conf_init(test);
     rle_compress_load(test, strm, 1);
+    test->rle_0 = 3;
+    test->rle_1 = 2;
+    for (int i = 0; i < test->conf->rle_cnt; i += 2)
+    {
+        rle_prepare_encode(test, test->rle_buf[i], test->rle_buf[i + 1]);
+    }
     printf("input: 9  6\n");
-    printf("output: %d, %d, %d, %d, ", test->rle_buf[0], test->rle_buf[1], test->rle_buf[2], test->rle_buf[3]);
-    printf("%d, %d, %d, %d\n", test->rle_buf[4], test->rle_buf[5], test->rle_buf[6], test->rle_buf[7]);
+    printf("rle_0: %d  rle_1: %d\n", test->rle_0, test->rle_1);
+    printf("output: %d  %d  %d  %d  %d\n", test->res_buf[0], test->res_buf[1], test->res_buf[2], test->res_buf[3], test->res_buf[4]);
     printf("//////////////////////////////////////////////\n");
 
+    /* Test 7 */
+    // Best Volume Test
+    rle_init(test);
+    // 9
+    // 0000 1 00 1
+    // 4    1 2  1
+    strm[0] = 9;
+    // 6
+    // 00000 11 0
+    // 5     2  1
+    strm[1] = 6;
+    test->conf->each_size = 2;
+    compress_conf_init(test);
+    rle_compress_load(test, strm, 1);
+    uint32_t min_size;
+    rle_get_min_size(test, &min_size);
+    printf("input: 9  6\n");
+    printf("best_rle_0: %d\nbest_rle_1: %d\nmin_size: %d bytes\n", test->rle_0, test->rle_1, min_size);
+    printf("//////////////////////////////////////////////\n");
+
+    /* Test 8 */
+    // Efficiency Test
+
+    memset(strm, 0, test_buffer_size * sizeof(uint8_t));
+    rle_init(test);
+    compress_conf_init(test);
+
+    test->conf->each_size = 1000;
+    for (size_t i = 0; i < test->conf->each_size; i++)
+    {
+        strm[i] = (uint8_t)rand();
+    }
+    clock_t start = clock();
+    rle_compress_load(test, strm, 1);
+    rle_get_min_size(test, &min_size);
+    for (int i = 0; i < test->conf->rle_cnt; i += 2)
+    {
+        rle_prepare_encode(test, test->rle_buf[i], test->rle_buf[i + 1]);
+    }
+    assert(test->byte_cursor + 1 == min_size);
+    printf("data: %d bytes\n", test->conf->each_size);
+    printf("best_rle_0: %d\nbest_rle_1: %d\nmin_size: %d bytes\n", test->rle_0, test->rle_1, min_size);
+    printf("It takes %f secs\n", (double)(clock() - start) / CLOCKS_PER_SEC);
+    printf("//////////////////////////////////////////////\n");
+
+    /*
+        printf("-------------Source------------------\n");
+        for (int i = 0; i < test->conf->each_size; i++) {
+            printf("%d ", strm[i]);
+        }
+        printf("\n-------------RLE code----------------\n");
+        for (int i = 0; i < test->conf->each_size; i++) {
+            printf("%d ", test->rle_buf[i]);
+        }
+        printf("\n-------------Result code-------------\n");
+        for (int i = 0; i < test->conf->each_size; i++) {
+            printf("%d ", test->res_buf[i]);
+        }
+        printf("\n");
+
+
+    */
     rle_free(test);
     return 0;
 }

@@ -316,11 +316,11 @@ int main()
     // 1 0 11 0 1 00
     // 1 1 2  1 1 2
     memset(strm, 0, test_buffer_size);
-    strm[0] = 188;
+    strm[0] = 180;
     test->conf->each_size = 1;
     compress_conf_init(test);
     rle_compress_load(test, strm, 1);
-    printf("input: 127\n");
+    printf("input: 180\n");
     printf("cnt: %d\n", test->conf->rle_cnt);
     printf("output: %d  %d  %d  %d  ", test->rle_buf[0], test->rle_buf[1], test->rle_buf[2], test->rle_buf[3]);
     printf("%d  %d  %d  %d\n", test->rle_buf[4], test->rle_buf[5], test->rle_buf[6], test->rle_buf[7]);
@@ -372,16 +372,16 @@ int main()
     printf("//////////////////////////////////////////////\n");
 
     /* Test 8 */
-    // Efficiency Test
-
+    // Ascii Performance Test
+    // data: 34200 bytes -> 16020 bytes (46.842105%)
     memset(strm, 0, test_buffer_size * sizeof(uint8_t));
     rle_init(test);
     compress_conf_init(test);
 
-    test->conf->each_size = 1000;
+    test->conf->each_size = sizeof(ascii);
     for (size_t i = 0; i < test->conf->each_size; i++)
     {
-        strm[i] = (uint8_t)rand();
+        strm[i] = ascii[i];
     }
     clock_t start = clock();
     rle_compress_load(test, strm, 1);
@@ -391,11 +391,10 @@ int main()
         rle_prepare_encode(test, test->rle_buf[i], test->rle_buf[i + 1]);
     }
     assert(test->byte_cursor + 1 == min_size);
-    printf("data: %d bytes\n", test->conf->each_size);
-    printf("best_rle_0: %d\nbest_rle_1: %d\nmin_size: %d bytes\n", test->rle_0, test->rle_1, min_size);
+    printf("data: %d bytes -> %d bytes (%llf%%)\n", test->conf->each_size, min_size, ((double)min_size/(double)test->conf->each_size)*100);
+    printf("best_rle_0: %d\nbest_rle_1: %d\n", test->rle_0, test->rle_1);
     printf("It takes %f secs\n", (double)(clock() - start) / CLOCKS_PER_SEC);
     printf("//////////////////////////////////////////////\n");
-
     /*
         printf("-------------Source------------------\n");
         for (int i = 0; i < test->conf->each_size; i++) {
@@ -410,8 +409,6 @@ int main()
             printf("%d ", test->res_buf[i]);
         }
         printf("\n");
-
-
     */
     rle_free(test);
     return 0;

@@ -14,6 +14,7 @@
  *
  * Copyright (C) [2024] Rm
  * Author: Rm
+ * Time: 2004.10.20
  *
  * Modifications made in [2024] by: Rm
  */
@@ -27,17 +28,17 @@
 #include <stdint.h>
 #include "time.h"
 
-uint8_t rle_new(struct RleBlock **self, uint32_t data_size)
+uint8_t rle_block_new(struct RleBlock **self, uint32_t data_size)
 {
     struct RleBlock *new;
-    if (rle_alloc(&new, data_size))
+    if (rle_block_alloc(&new, data_size))
         return 1;
-    if (rle_init(new))
+    if (rle_block_init(new))
         return 1;
     *self = new;
     return 0;
 }
-uint8_t rle_alloc(struct RleBlock **self, uint32_t data_size)
+uint8_t rle_block_alloc(struct RleBlock **self, uint32_t data_size)
 {
     struct RleBlock *s = malloc(sizeof(struct RleBlock));
     if (s == NULL)
@@ -68,7 +69,7 @@ FAIL_RES:
 FAIL_SELF:
     return 1;
 }
-uint8_t rle_init(struct RleBlock *self)
+uint8_t rle_block_init(struct RleBlock *self)
 {
     memset(self->res_buf, 0, self->res_msize);
     self->last_a = 0;
@@ -85,7 +86,7 @@ uint8_t compress_conf_init(struct RleBlock *self)
     self->conf->rle_cnt = 0;
     return 0;
 }
-uint8_t rle_free(struct RleBlock *self)
+uint8_t rle_block_free(struct RleBlock *self)
 {
     if (self->res_buf != NULL)
     {
@@ -181,7 +182,7 @@ uint8_t rle_get_min_size(struct RleBlock *target, uint32_t *size)
                 // printf("best_rle_0: %d, best_rle_1: %d\n", best_rle_0, best_rle_1);
                 // printf("min_volume = %d bytes, best_rle_0 = %d, best_rle_1 = %d\n", min_volume, cur_rle_0, cur_rle_1);
             }
-            rle_init(target);
+            rle_block_init(target);
         }
     }
     target->rle_0 = best_rle_0, target->rle_1 = best_rle_1;
@@ -275,7 +276,7 @@ int main()
     srand((unsigned)time(NULL));
 
     struct RleBlock *test;
-    if (rle_new(&test, test_buffer_size))
+    if (rle_block_new(&test, test_buffer_size))
     {
         printf("Error: RleBlock malloc failed\n");
         return -1;
@@ -296,7 +297,7 @@ int main()
     // overflow, no repeatition
     test->rle_0 = 3;
     test->rle_1 = 2;
-    rle_init(test);
+    rle_block_init(test);
     rle_prepare_encode(test, 9, 6);
     printf("input: 9  6\n");
     printf("rle_0: %d  rle_1: %d\n", test->rle_0, test->rle_1);
@@ -308,7 +309,7 @@ int main()
     // overflow and repeatition
     test->rle_0 = 2;
     test->rle_1 = 2;
-    rle_init(test);
+    rle_block_init(test);
     rle_prepare_encode(test, 9, 6);
     printf("input: 9  6\n");
     printf("rle_0: %d  rle_1: %d\n", test->rle_0, test->rle_1);
@@ -317,7 +318,7 @@ int main()
 
     /* Test 4 */
     // RLE algorithm
-    rle_init(test);
+    rle_block_init(test);
     // 9
     // 0000 1 00 1
     // 4    1 2  1
@@ -331,7 +332,7 @@ int main()
 
     /* Test 5 */
     // RLE Compress
-    rle_init(test);
+    rle_block_init(test);
     // 180
     // 1 0 11 0 1 00
     // 1 1 2  1 1 2
@@ -348,7 +349,7 @@ int main()
 
     /* Test 6 */
     // Compress and Encode
-    rle_init(test);
+    rle_block_init(test);
     // 9
     // 0000 1 00 1
     // 4    1 2  1
@@ -373,7 +374,7 @@ int main()
 
     /* Test 7 */
     // Best Volume Test
-    rle_init(test);
+    rle_block_init(test);
     // 9
     // 0000 1 00 1
     // 4    1 2  1
@@ -395,7 +396,7 @@ int main()
     // Ascii Performance Test
     // data: 34200 bytes -> 16020 bytes (46.842105%)
     memset(strm, 0, test_buffer_size * sizeof(uint8_t));
-    rle_init(test);
+    rle_block_init(test);
     compress_conf_init(test);
 
     test->conf->each_size = sizeof(ascii);
@@ -430,6 +431,6 @@ int main()
         }
         printf("\n");
     */
-    rle_free(test);
+    rle_block_free(test);
     return 0;
 }

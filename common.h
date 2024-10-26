@@ -52,23 +52,24 @@ struct RleBlock {
 
 struct GraphicsDecoder {
     uint8_t **buffer;
+    uint32_t x_size, y_size;
     uint8_t *data_ptr;
     uint8_t rle_0, rle_1;
-    uint32_t len, cnt;
     uint32_t byte_cursor;
-    uint32_t local_x, local_y;
     uint8_t bit_cursor;
     uint32_t width, height;
     uint32_t  x_start, y_start;
+    uint32_t local_x, local_y;
     uint8_t last_bg, last_fg;
 };
 
-uint8_t rle_new(struct RleBlock **self, uint32_t result_size);
-uint8_t rle_alloc(struct RleBlock **self, uint32_t result_size);
-uint8_t rle_init(struct RleBlock *self);
-uint8_t rle_free(struct RleBlock *self);
+/* Encoder Memory Management */
+uint8_t rle_block_new(struct RleBlock **self, uint32_t result_size);
+uint8_t rle_block_alloc(struct RleBlock **self, uint32_t result_size);
+uint8_t rle_block_init(struct RleBlock *self);
+uint8_t rle_block_free(struct RleBlock *self);
 
-
+/* Encoder Func */
 uint8_t rle_write_bits(struct RleBlock* target, uint8_t byte, uint8_t len);
 uint8_t rle_encode(struct RleBlock* target, uint8_t a, uint8_t b);
 uint8_t rle_prepare_encode(struct RleBlock* target, uint8_t a, uint8_t b);
@@ -78,4 +79,20 @@ uint8_t compress_conf_init(struct RleBlock *self);
 uint8_t rle_try_best_rle(struct RleBlock *target);
 uint8_t rle_get_min_size(struct RleBlock *target, uint32_t *size);
  
+
+/* Decoder Memory Management */
+uint8_t rle_decoder_init(struct GraphicsDecoder *self, uint8_t *data_ptr, uint8_t rle_0, uint8_t rle_1,
+                         uint8_t width, uint8_t height);
+uint8_t rle_decoder_alloc(struct GraphicsDecoder **self, uint32_t x_size, uint32_t y_size);
+uint8_t rle_decoder_new(struct GraphicsDecoder **self, uint32_t x_size, uint32_t y_size, uint8_t *data_ptr,
+                        uint8_t rle_0, uint8_t rle_1, uint8_t width, uint8_t height);
+uint8_t rle_decoder_setup(struct GraphicsDecoder *self);
+uint8_t rle_decoder_free(struct GraphicsDecoder *self);
+
+/* Decoder Func */
+uint8_t rle_decode(struct GraphicsDecoder *decoder);
+uint8_t __unsafe_write_buffer(struct GraphicsDecoder *decoder, uint8_t is_background, uint32_t cnt);
+uint8_t __draw_line(struct GraphicsDecoder *decoder, uint32_t x, uint32_t y, uint32_t cnt, uint8_t is_background);
+uint8_t __unsafe_read_graphics_info(struct GraphicsDecoder *decoder, void *target, uint8_t info_index, uint8_t bit_cnt);
+uint8_t __unsafe_read_graphics_bits(struct GraphicsDecoder *decoder, uint8_t *target, uint8_t cnt);
 #endif

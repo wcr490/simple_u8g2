@@ -311,4 +311,5 @@ int main()
         printf("\n");
     }
     printf("//////////////////////////////////////////////\n");
+    rle_decoder_free(gd);
 }

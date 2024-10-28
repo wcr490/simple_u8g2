@@ -25,6 +25,7 @@
 #include "stdlib.h"
 #include "stdio.h"
 uint8_t rle_decoder_setup(struct GraphicsDecoder *self) {
+    self->last_bg = 0, self->last_fg = 0;
     self->byte_cursor = 0;
     self->bit_cursor = 0;
     self->local_x = 0;
@@ -135,7 +136,6 @@ uint8_t __unsafe_read_graphics_bits(struct GraphicsDecoder *decoder, uint8_t *ta
 
     uint8_t len = (decoder->bit_cursor + cnt >= 8) ? 8 - decoder->bit_cursor : cnt;
     uint8_t data = (decoder->data_ptr[decoder->byte_cursor] >> decoder->bit_cursor) & ((1 << len) - 1);
-    // printf("len = %d, data = %d\n", len, data);
     decoder->bit_cursor += len;
     // Jump to the next byte if the bit_cursor >= 8
     if (decoder->bit_cursor >= 8)
@@ -173,9 +173,11 @@ uint8_t __unsafe_write_buffer(struct GraphicsDecoder *decoder, uint8_t is_backgr
     uint32_t local_x = decoder->local_x, local_y = decoder->local_y, global_x, global_y;
     // Global start position
     uint32_t x_start = decoder->x_start, y_start = decoder->y_start;
-    while (1)
+    while (cnt > 0)
     {
+        // printf("width = %d, local_x = %d\n", decoder->width, local_x);
         cur_remain = decoder->width - local_x;
+        
         // Jump or not
         current_cnt = _cnt > cur_remain ? cur_remain : _cnt;
         // Get global x, y
@@ -186,14 +188,14 @@ uint8_t __unsafe_write_buffer(struct GraphicsDecoder *decoder, uint8_t is_backgr
         if (current_cnt > 0)
             if (__draw_line(decoder, global_x, global_y, current_cnt, is_background))
                 return 1;
-
-        if (_cnt <= cur_remain)
+        if (_cnt <= cur_remain) {
             break;
+        }
         _cnt -= cur_remain;
         local_x = 0;
         local_y++;
     }
-    decoder->local_x = local_x + cnt;
+    decoder->local_x = local_x + _cnt;
     decoder->local_y = local_y;
     return 0;
 }
@@ -219,10 +221,12 @@ uint8_t rle_decode(struct GraphicsDecoder *decoder)
     while (1)
     {
         // WRONG: CHECK IT CAREFULLY !!!
-        if (decoder->local_y >= decoder->height)
+        if (decoder->local_y >= decoder->height || ((decoder->local_y == decoder->height - 1) && (decoder->local_x == decoder->width)))
             break;
+        // printf("local_x = %d local_y = %d\n", decoder->local_x, decoder->local_y);
         if (is_first_time)
         {
+            // printf("first time\n");
             flag = 0;
             is_first_time = 0;
         }
@@ -232,14 +236,17 @@ uint8_t rle_decode(struct GraphicsDecoder *decoder)
         // Repeatition
         if (flag)
         {
-            if (__unsafe_write_buffer(decoder, 0, decoder->last_bg))
-                return 2;
-            if (__unsafe_write_buffer(decoder, 1, decoder->last_fg))
+            // printf("Repeatition\n");
+            if (__unsafe_write_buffer(decoder, 1, decoder->last_bg))
+                return 2; 
+            if (__unsafe_write_buffer(decoder, 0, decoder->last_fg))
                 return 3;
+            // printf("last_bg = %d, last_fg = %d\n", decoder->last_bg, decoder->last_fg);
         }
         // New Mode
         else
         {
+            // printf("New Mode\n");
             // Background first, Frontground second.
             for (uint32_t i = 0; i < 2; i++)
             {
@@ -250,6 +257,7 @@ uint8_t rle_decode(struct GraphicsDecoder *decoder)
                     return 5;
             }
         }
+        // printf("------------------------------\n");
     }
 
     return 0;
@@ -266,50 +274,3 @@ uint8_t prepare_graphics_decode(struct GraphicsDecoder *decoder)
 }
 */
 
-int main()
-{
-    struct GraphicsDecoder *gd;
-    printf("//////////////////////////////////////////////\n");
-    /* Test 1 */
-    // READ
-    uint8_t *test = malloc(5 * sizeof(uint8_t));
-    test[0] = 35;
-    rle_decoder_new(&gd, 100, 100, test, 2, 2, 4, 2);
-    rle_decoder_setup(gd);
-    uint8_t res;
-    for (int i = 0; i < 3; i++)
-    {
-        __unsafe_read_graphics_bits(gd, &res, 2);
-        printf("res = %d\n", res);
-    }
-    printf("//////////////////////////////////////////////\n");
-
-    /* Test 2 */
-    // WRITE
-    rle_decoder_setup(gd);
-    gd->width = 4;
-    printf("%d\n", __unsafe_write_buffer(gd, 0, 7));
-    printf("//////////////////////////////////////////////\n");
-
-    /* Test 3*/
-    // DECODE
-    // 13
-    // 0000 1101
-    test[0] = 35;
-    test[1] = 21;
-    gd->width = 4;
-    gd->height = 2;
-    gd->x_start = 0, gd->y_start = 0;
-    rle_decoder_setup(gd);
-    rle_decode(gd);
-    for (int i = 0; i < 2; i++)
-    {
-        for (int k = 0; k < 4; k++)
-        {
-            printf("%d ", gd->buffer[i][k]);
-        }
-        printf("\n");
-    }
-    printf("//////////////////////////////////////////////\n");
-    rle_decoder_free(gd);
-}

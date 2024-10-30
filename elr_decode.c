@@ -253,6 +253,7 @@ uint8_t rle_decode(struct GraphicsDecoder *decoder)
                 uint8_t *ground = i ? &decoder->last_fg : &decoder->last_bg;
                 if (__unsafe_read_graphics_bits(decoder, ground, i ? decoder->rle_1 : decoder->rle_0))
                     return 4;
+                // printf("ground = %d\n", *ground);
                 if (__unsafe_write_buffer(decoder, !i, *ground))
                     return 5;
             }

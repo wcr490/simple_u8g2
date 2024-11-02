@@ -24,7 +24,8 @@
 #include "assert.h"
 #include "stdlib.h"
 #include "stdio.h"
-uint8_t rle_decoder_setup(struct GraphicsDecoder *self) {
+uint8_t rle_decoder_setup(struct GraphicsDecoder *self)
+{
     self->last_bg = 0, self->last_fg = 0;
     self->byte_cursor = 0;
     self->bit_cursor = 0;
@@ -89,8 +90,10 @@ uint8_t rle_decoder_new(struct GraphicsDecoder **self, uint32_t x_size, uint32_t
     *self = new;
     return 0;
 }
-uint8_t rle_decoder_free(struct GraphicsDecoder *self) {
-    if (self != NULL) {
+uint8_t rle_decoder_free(struct GraphicsDecoder *self)
+{
+    if (self != NULL)
+    {
         for (int i = 0; i < self->y_size; i++)
         {
             free(self->buffer[i]);
@@ -155,14 +158,61 @@ uint8_t __unsafe_read_graphics_bits(struct GraphicsDecoder *decoder, uint8_t *ta
     return 0;
 }
 
+/*
 uint8_t __draw_line(struct GraphicsDecoder *decoder, uint32_t x, uint32_t y, uint32_t cnt, uint8_t is_background)
 {
     // Write
     // printf("write: (%d, %d) cnt = %d is_background = %d\n", x, y, cnt, is_background);
+
     for (int i = 0; i < cnt; i++)
     {
         decoder->buffer[y][x + i] = !is_background;
     }
+    return 0;
+}
+
+*/
+uint8_t __draw_line(struct GraphicsDecoder *decoder, uint32_t x, uint32_t y, uint32_t cnt, uint8_t is_background)
+{
+    // memset(&(decoder->buffer[y][x]), !is_background, cnt);
+    uint8_t ground = is_background ? 0x00 : 0xFF;
+    uint8_t bit_len;
+    uint32_t byte_pos = x / 8;
+    uint8_t bit_offset = x % 8;
+
+    if (bit_offset > 0)
+    {
+        bit_len = (8 - bit_offset) < cnt ? (8 - bit_offset) : cnt;
+        uint8_t mask = ((1 << bit_len) - 1) << bit_offset;
+
+        decoder->buffer[y][byte_pos] = (decoder->buffer[y][byte_pos] & ~mask) | (ground & mask);
+
+        cnt -= bit_len;
+        byte_pos++;
+    }
+
+    while (cnt >= 8)
+    {
+        decoder->buffer[y][byte_pos] = ground;
+        cnt -= 8;
+        byte_pos++;
+    }
+
+    if (cnt > 0)
+    {
+        uint8_t mask = (1 << cnt) - 1;
+        decoder->buffer[y][byte_pos] = (decoder->buffer[y][byte_pos] & ~mask) | (ground & mask);
+    }
+
+    return 0;
+}
+uint8_t __quick_draw(struct GraphicsDecoder *decoder, uint32_t x, uint32_t y, uint32_t ground, uint32_t cnt)
+{
+    return 0;
+}
+uint8_t __quick_write_buffer(struct GraphicsDecoder *decoder, uint32_t ground, uint32_t cnt)
+{
+
     return 0;
 }
 
@@ -177,7 +227,7 @@ uint8_t __unsafe_write_buffer(struct GraphicsDecoder *decoder, uint8_t is_backgr
     {
         // printf("width = %d, local_x = %d\n", decoder->width, local_x);
         cur_remain = decoder->width - local_x;
-        
+
         // Jump or not
         current_cnt = _cnt > cur_remain ? cur_remain : _cnt;
         // Get global x, y
@@ -186,9 +236,11 @@ uint8_t __unsafe_write_buffer(struct GraphicsDecoder *decoder, uint8_t is_backgr
 
         // printf("cur_remain: %d, current_cnt: %d, global_x: %d, global_y: %d, local_x: %d, local_y: %d, cnt: %d\n", cur_remain, current_cnt, global_x, global_y, local_x, local_y, _cnt);
         if (current_cnt > 0)
+            // If global y and global x are not in the same line, It may cause problems
             if (__draw_line(decoder, global_x, global_y, current_cnt, is_background))
                 return 1;
-        if (_cnt <= cur_remain) {
+        if (_cnt <= cur_remain)
+        {
             break;
         }
         _cnt -= cur_remain;
@@ -218,6 +270,7 @@ uint8_t rle_decode(struct GraphicsDecoder *decoder)
     // TODO: Spare the space for the next Graphics
     // New Mode / Repeatition
     uint8_t flag;
+    uint32_t repeat_count = 0;
     while (1)
     {
         // WRONG: CHECK IT CAREFULLY !!!
@@ -230,15 +283,15 @@ uint8_t rle_decode(struct GraphicsDecoder *decoder)
             flag = 0;
             is_first_time = 0;
         }
-        else
-            if (__unsafe_read_graphics_bits(decoder, &flag, 1))
-                return 1;
+        else if (__unsafe_read_graphics_bits(decoder, &flag, 1))
+            return 1;
         // Repeatition
         if (flag)
         {
+            repeat_count++;
             // printf("Repeatition\n");
             if (__unsafe_write_buffer(decoder, 1, decoder->last_bg))
-                return 2; 
+                return 2;
             if (__unsafe_write_buffer(decoder, 0, decoder->last_fg))
                 return 3;
             // printf("last_bg = %d, last_fg = %d\n", decoder->last_bg, decoder->last_fg);
@@ -274,4 +327,3 @@ uint8_t prepare_graphics_decode(struct GraphicsDecoder *decoder)
     return 0;
 }
 */
-
